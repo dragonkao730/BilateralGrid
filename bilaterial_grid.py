@@ -50,3 +50,38 @@ def interp_1d(
     w_1 = tf.expand_dims(w_1, -1)
     
     return w_0*y_0_val + w_1*y_1_val
+
+# [b, h, w, 3]
+def apply_bg(
+    bg,     # [b, ?, ?, d*3*4]
+    guide,  # [b, h, w], 0 <= guide <= 1
+    in_img, # [b, h, w, 3]
+):
+    b, _, _, d34, = get_tensor_shape(bg)
+    b, h, w,      = get_tensor_shape(guide)
+    b, h, w, _,   = get_tensor_shape(in_img)
+    
+    d = d34//3//4
+    
+    bg = tf.image.resize_images(bg, [h, w]) # [b, h, w, d*3*4]
+    
+    coef = interp_1d(
+        tf.reshape(bg, [b*h*w, d, 3*4]),       # [b*h*w, d, 3*4]
+        (d - 1)*tf.reshape(guide, [b*h*w, 1]), # [b*h*w, 1]
+    ) # [b*h*w, 1, 3*4]
+    coef = tf.reshape(coef, [b, h, w, 3, 4]) # [b, h, w, 3, 4]
+    
+    in_img = tf.reshape(in_img, [b, h, w, 3, 1]) # [b, h, w, 3, 1]
+    in_img = tf.pad(
+        in_img,
+        [[0, 0], [0, 0], [0, 0], [0, 1], [0, 0]],
+        mode='CONSTANT',
+        constant_values=1,
+    ) # [b, h, w, 4, 1]
+    
+    out_img = tf.matmul(coef, in_img)           # [b, h, w, 3, 1]
+    out_img = tf.reshape(out_img, [b, h, w, 3]) # [b, h, w, 3]
+    
+    return out_img
+    
+    
